@@ -178,9 +178,12 @@ class CurlDownloader
 
         $version = curl_version();
         $features = $version['features'];
-        if (0 === strpos($url, 'https://') && \defined('CURL_VERSION_HTTP2') && \defined('CURL_HTTP_VERSION_2_0') && (CURL_VERSION_HTTP2 & $features)) {
-            curl_setopt($curlHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+        if (0 === strpos($url, 'https://') && \defined('CURL_VERSION_HTTP2') && \defined('CURL_HTTP_VERSION_2_0') && (CURL_VERSION_HTTP2 & $features) && !isset($attributes['forceHttp1'])) {
+            curl_setopt($curlHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+        } elseif (isset($attributes['forceHttp1'])) {
+            curl_setopt($curlHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
         }
+
 
         $options['http']['header'] = $this->authHelper->addAuthenticationHeader($options['http']['header'], $origin, $url);
         // Merge in headers - we don't get any proxy values
@@ -300,6 +303,11 @@ class CurlDownloader
                 // TODO progress
                 if (CURLE_OK !== $errno || $error || $result !== CURLE_OK) {
                     $errno = $errno ?: $result;
+                    if ($errno === 92 && !isset($job['attributes']['forceHttp1'])) {
+                        $this->restartJob($job, $job['url'], array('forceHttp1' => true));
+                        continue;
+                    }
+
                     if (!$error && function_exists('curl_strerror')) {
                         $error = curl_strerror($errno);
                     }
